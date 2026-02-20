@@ -2,6 +2,29 @@
 
 A clean Streamlit application for indexing YouTube transcripts and retrieving timestamped clips with semantic search.
 
+[Demo Video](https://github.com/Rohan1924/Youtube-search-engine)
+
+## Screenshots
+
+Add your screenshots to `assets/screenshots/` with these names:
+
+- `home.png`
+- `upload.png`
+- `search-results.png`
+
+Then they will render here:
+
+![Home](assets/screenshots/home.png)
+![Upload Pipeline](assets/screenshots/upload.png)
+![Search Results](assets/screenshots/search-results.png)
+
+## Demo
+
+- Upload your demo video to `assets/demo/demo.mp4` and commit it if size is acceptable.
+- If the file is large, upload to YouTube/Drive and replace the link below.
+
+[Watch Demo](https://github.com/Rohan1924/Youtube-search-engine)
+
 ## What it does
 
 - Downloads video audio using `yt-dlp`
@@ -15,6 +38,8 @@ A clean Streamlit application for indexing YouTube transcripts and retrieving ti
 - `app.py`: Streamlit UI, indexing workflow, and retrieval workflow
 - `transcribe_videos.py`: YouTube fetch + transcription + chunking pipeline
 - `requirements.txt`: runtime dependencies
+- `assets/screenshots/`: README screenshots
+- `assets/demo/`: demo video file(s)
 - `whisper_outputs/`: generated transcript chunk files
 
 ## Quick start
