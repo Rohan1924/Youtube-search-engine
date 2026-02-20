@@ -1,49 +1,62 @@
-# Youtube-rag-application
-“Interactive app to upload YouTube videos, generate transcripts with Whisper, and search clips via a Streamlit RAG UI.”
-# 🎥 YouTube RAG Application
+# YouTube RAG Search Engine
 
-An interactive Streamlit application that lets you:
+Semantic search over YouTube video transcripts with a Streamlit UI. The app fetches or transcribes audio, chunks text with timestamps, embeds it via LangFlow, and returns time-accurate clips.
 
-- 🔎 Search YouTube or paste a YouTube URL  
-- 📝 Auto-transcribe videos using Whisper / WhisperX  
-- ✂️ Chunk transcripts with timestamps  
-- 🗄️ Upload embeddings to AstraDB through LangFlow  
-- 🔍 Perform semantic search over video clips  
-- ▶️ Get timestamp-accurate video snippets directly in the UI  
+## Highlights
+- Search YouTube or paste a direct video link
+- Automatic transcription with Whisper (WhisperX optional)
+- Timestamped chunks stored in AstraDB via LangFlow
+- Semantic search with clickable, time-based results
 
----
+## How It Works
+1. Find videos (search or direct link)
+2. Download audio and transcribe (Whisper, fallback to captions)
+3. Chunk transcripts with timestamps
+4. Upload embeddings to AstraDB through LangFlow
+5. Query and display matching clips in Streamlit
 
-# Features
+## Tech Stack
+- Streamlit for the UI
+- Whisper / WhisperX for transcription
+- yt-dlp for audio download
+- LangFlow HTTP API for embeddings and retrieval
+- AstraDB as the vector store
 
-# 1. Video Processing
-- Downloads audio using `yt-dlp`
-- Transcribes using Whisper (`openai-whisper`)
-- Falls back to YouTube captions if Whisper fails
-- Optional WhisperX for better word-level timestamps
-- Chunks transcript into 800–900 character segments
+## Quickstart
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Configure LangFlow/AstraDB settings in `app.py`:
+   - `HOST`
+   - `UPLOAD_FLOW_ID`
+   - `QUERY_FLOW_ID`
+   - `API_KEY`
+3. Run the app:
+   ```bash
+   streamlit run app.py
+   ```
 
-# 2. RAG Pipeline
-- Uses LangFlow's HTTP API
-- Uploads chunks to AstraDB vector store  
-- Queries embeddings via another LangFlow flow  
-- Returns:
-  - `video_id`
-  - `start` / `end` timestamps
-  - `text` snippet
-  - `semantic similarity score`
+## Configuration
+Update the constants in `app.py` to match your LangFlow deployment.
 
-# 3. Streamlit App
-Two tabs:
+| Setting | Description |
+| --- | --- |
+| `HOST` | LangFlow host (e.g., ngrok URL) |
+| `UPLOAD_FLOW_ID` | Flow used to embed and store chunks |
+| `QUERY_FLOW_ID` | Flow used to query stored chunks |
+| `API_KEY` | Auth key for LangFlow (if enabled) |
+| `CHUNK_SIZE` | Max characters per chunk |
 
-# Upload & Embed**
-- Search YouTube (top N videos)  
-- OR paste a YouTube URL  
-- Transcribes → chunks → sends to LangFlow  
+## Project Structure
+- `app.py` Streamlit UI and LangFlow integration
+- `transcribe_videos.py` YouTube download, transcription, and chunking
+- `requirements.txt` Python dependencies
 
-#  Search Videos
-- Enter a natural language query  
-- Returns the most relevant clips  
-- Inline YouTube player with timestamps  
+## Notes
+- `ffmpeg` is required by `yt-dlp` for audio extraction.
+- WhisperX is optional and used when installed.
+- Do not commit real API keys to public repositories.
 
-
-
+## License
+No license specified.
