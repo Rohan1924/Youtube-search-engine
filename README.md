@@ -1,62 +1,72 @@
-# YouTube RAG Search Engine
+# YouTube Search Engine
 
-Semantic search over YouTube video transcripts with a Streamlit UI. The app fetches or transcribes audio, chunks text with timestamps, embeds it via LangFlow, and returns time-accurate clips.
+A clean Streamlit application for indexing YouTube transcripts and retrieving timestamped clips with semantic search.
 
-## Highlights
-- Search YouTube or paste a direct video link
-- Automatic transcription with Whisper (WhisperX optional)
-- Timestamped chunks stored in AstraDB via LangFlow
-- Semantic search with clickable, time-based results
+## What it does
 
-## How It Works
-1. Find videos (search or direct link)
-2. Download audio and transcribe (Whisper, fallback to captions)
-3. Chunk transcripts with timestamps
-4. Upload embeddings to AstraDB through LangFlow
-5. Query and display matching clips in Streamlit
+- Downloads video audio using `yt-dlp`
+- Transcribes with Whisper (fallback to YouTube captions)
+- Chunks transcript text with timestamps
+- Sends chunks to a LangFlow embedding pipeline (AstraDB-backed)
+- Runs semantic retrieval and returns relevant clips with direct playback links
 
-## Tech Stack
-- Streamlit for the UI
-- Whisper / WhisperX for transcription
-- yt-dlp for audio download
-- LangFlow HTTP API for embeddings and retrieval
-- AstraDB as the vector store
+## Project structure
 
-## Quickstart
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Configure LangFlow/AstraDB settings in `app.py`:
-   - `HOST`
-   - `UPLOAD_FLOW_ID`
-   - `QUERY_FLOW_ID`
-   - `API_KEY`
-3. Run the app:
-   ```bash
-   streamlit run app.py
-   ```
+- `app.py`: Streamlit UI, indexing workflow, and retrieval workflow
+- `transcribe_videos.py`: YouTube fetch + transcription + chunking pipeline
+- `requirements.txt`: runtime dependencies
+- `whisper_outputs/`: generated transcript chunk files
 
-## Configuration
-Update the constants in `app.py` to match your LangFlow deployment.
+## Quick start
 
-| Setting | Description |
-| --- | --- |
-| `HOST` | LangFlow host (e.g., ngrok URL) |
-| `UPLOAD_FLOW_ID` | Flow used to embed and store chunks |
-| `QUERY_FLOW_ID` | Flow used to query stored chunks |
-| `API_KEY` | Auth key for LangFlow (if enabled) |
-| `CHUNK_SIZE` | Max characters per chunk |
+1. Clone and install dependencies.
 
-## Project Structure
-- `app.py` Streamlit UI and LangFlow integration
-- `transcribe_videos.py` YouTube download, transcription, and chunking
-- `requirements.txt` Python dependencies
+```bash
+git clone https://github.com/Rohan1924/Youtube-search-engine.git
+cd Youtube-search-engine
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-## Notes
-- `ffmpeg` is required by `yt-dlp` for audio extraction.
-- WhisperX is optional and used when installed.
-- Do not commit real API keys to public repositories.
+2. Configure environment variables.
+
+```bash
+cp .env.example .env
+```
+
+Set the values in `.env` (or export directly in your shell):
+
+- `LANGFLOW_HOST`
+- `LANGFLOW_UPLOAD_FLOW_ID`
+- `LANGFLOW_QUERY_FLOW_ID`
+- `LANGFLOW_API_KEY` (optional, if your LangFlow instance requires auth)
+- `LANGFLOW_TIMEOUT` (optional, default `90`)
+
+3. Run the app.
+
+```bash
+streamlit run app.py
+```
+
+## Configuration notes
+
+- App startup requires `LANGFLOW_HOST`, `LANGFLOW_UPLOAD_FLOW_ID`, and `LANGFLOW_QUERY_FLOW_ID`.
+- Authentication supports Bearer token, `x-api-key`, and `api_key` query fallback.
+- Whisper output JSON files are written to `./whisper_outputs`.
+
+## Usage
+
+1. Open **Upload and Embed**.
+2. Choose either a YouTube search query or a single video URL.
+3. Run indexing to push transcript chunks into your vector pipeline.
+4. Open **Search Clips** and ask natural-language queries.
+5. Play the returned timestamped clips directly in the UI.
+
+## Security
+
+Do not commit real API keys. Use environment variables or local `.env` only.
 
 ## License
-No license specified.
+
+Add a license file if you plan to distribute or accept contributions.

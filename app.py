@@ -1,112 +1,122 @@
-import streamlit as st
-import requests
 import json
+import os
 import re
 import time
 import uuid
 from pathlib import Path
-from transcribe_videos import process_youtube_search, process_single_video
 
-# Configuration
-HOST = "https://brainless-vicenta-glottic.ngrok-free.dev"
-UPLOAD_FLOW_ID = "6aeffd74-6ad2-48e3-8d94-2ef7af03dfc1"
-QUERY_FLOW_ID = "9298cf0a-a1b7-42e3-a04b-f88d4b91610e"
-API_KEY = "sk-vZ6VfCG1RMrlURlLKOFlARwLjflZOl5KbJmV3oA8aXE"
-CHUNK_SIZE = 900
-TIMEOUT = 90.0
+import requests
+import streamlit as st
+
+from transcribe_videos import process_single_video, process_youtube_search
+
+
+HOST = os.getenv("LANGFLOW_HOST", "")
+UPLOAD_FLOW_ID = os.getenv("LANGFLOW_UPLOAD_FLOW_ID", "")
+QUERY_FLOW_ID = os.getenv("LANGFLOW_QUERY_FLOW_ID", "")
+API_KEY = os.getenv("LANGFLOW_API_KEY", "")
+TIMEOUT = float(os.getenv("LANGFLOW_TIMEOUT", "90"))
 OUTPUT_DIR = Path("./whisper_outputs")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Page config
-st.set_page_config(
-    page_title="YouTube RAG Search Engine",
-    page_icon="🎥",
-    layout="wide"
-)
 
-st.title("🎥 YouTube Video RAG System")
-st.markdown("Search through YouTube video transcripts with semantic search")
+def config_is_ready() -> bool:
+    return bool(HOST and UPLOAD_FLOW_ID and QUERY_FLOW_ID)
 
-# ==================== HELPER FUNCTIONS ====================
 
 def attempt_post(url, payload, headers=None, params=None):
     try:
-        r = requests.post(url, json=payload, headers=headers or {}, params=params or {}, timeout=TIMEOUT)
-        return (200 <= r.status_code < 300), r.status_code, r.text
-    except requests.RequestException as e:
-        return False, None, f"RequestException: {e}"
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers or {},
+            params=params or {},
+            timeout=TIMEOUT,
+        )
+        return (200 <= response.status_code < 300), response.status_code, response.text
+    except requests.RequestException as exc:
+        return False, None, f"RequestException: {exc}"
+
 
 def try_auth_methods(url, payload, api_key):
-    ok, status, body = attempt_post(url, payload, headers={"Content-Type": "application/json"})
+    ok, status, body = attempt_post(
+        url,
+        payload,
+        headers={"Content-Type": "application/json"},
+    )
     if ok:
         return ok, status, body, "no-auth"
+
     if not api_key:
         return ok, status, body, "no-auth-failed"
 
-    ok, status, body = attempt_post(url, payload, headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    })
+    ok, status, body = attempt_post(
+        url,
+        payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
     if ok:
         return ok, status, body, "bearer"
 
-    ok2, status2, body2 = attempt_post(url, payload, headers={
-        "Content-Type": "application/json",
-        "x-api-key": api_key
-    })
-    if ok2:
-        return ok2, status2, body2, "x-api-key"
+    ok, status, body = attempt_post(
+        url,
+        payload,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+        },
+    )
+    if ok:
+        return ok, status, body, "x-api-key"
 
-    ok3, status3, body3 = attempt_post(url, payload, headers={
-        "Content-Type": "application/json"
-    }, params={"api_key": api_key})
-    if ok3:
-        return ok3, status3, body3, "query-param"
+    ok, status, body = attempt_post(
+        url,
+        payload,
+        headers={"Content-Type": "application/json"},
+        params={"api_key": api_key},
+    )
+    return ok, status, body, "query-param"
 
-    return ok3, status3, body3, "all-tried"
-
-def clean_text(text):
-    cleaned = re.sub(r'\[\d+\.\d+–\d+\.\d+\]', '', text)
-    cleaned = ' '.join(cleaned.split())
-    return cleaned
 
 def format_for_langflow(doc):
     return f"[VID:{doc['video_id']}|{doc['start']}-{doc['end']}s] {doc['text']}"
 
+
 def send_chunks_to_langflow(docs, api_key, progress_bar=None, status_text=None):
-    """Send document chunks to LangFlow for embedding"""
     total = len(docs)
     results = []
     session_id = str(uuid.uuid4())
     upload_url = f"{HOST}/api/v1/run/{UPLOAD_FLOW_ID}"
 
-    for i, doc in enumerate(docs, 1):
-        formatted_text = format_for_langflow(doc)
+    for idx, doc in enumerate(docs, 1):
         payload = {
             "output_type": "text",
             "input_type": "chat",
-            "input_value": formatted_text,
-            "session_id": session_id
+            "input_value": format_for_langflow(doc),
+            "session_id": session_id,
         }
 
-        ok, status, body, method = try_auth_methods(upload_url, payload, api_key)
-        results.append((ok, status, doc['video_id']))
+        ok, status, body, _ = try_auth_methods(upload_url, payload, api_key)
+        results.append((ok, status, doc["video_id"]))
 
         if progress_bar:
-            progress_bar.progress(i / total)
+            progress_bar.progress(idx / total)
         if status_text:
-            status_text.text(f"Uploading chunk {i}/{total}...")
+            status_text.text(f"Uploading chunk {idx}/{total}...")
 
-        if status in [403, 500]:
-            return False, f"Error at chunk {i}: Status {status}"
+        if status in {403, 500}:
+            return False, f"Upload stopped at chunk {idx}: status {status}. Response: {body[:120]}"
 
         time.sleep(0.15)
 
-    successes = sum(1 for r in results if r[0])
-    return True, f"Successfully uploaded {successes}/{total} chunks"
+    successes = sum(1 for item in results if item[0])
+    return True, f"Uploaded {successes}/{total} chunks."
+
 
 def parse_response_json(response_text):
-    """Parse JSON array response from LangFlow"""
     try:
         data = json.loads(response_text)
 
@@ -114,219 +124,279 @@ def parse_response_json(response_text):
             return data
 
         if isinstance(data, dict):
-            if 'outputs' in data:
-                outputs = data.get('outputs', [])
-                if outputs and len(outputs) > 0:
-                    first_output = outputs[0]
-                    if 'outputs' in first_output:
-                        inner = first_output['outputs'][0] if first_output['outputs'] else {}
-                        if 'results' in inner:
-                            results = inner['results']
-                            if 'message' in results:
-                                msg = results['message']
-                                if isinstance(msg, dict) and 'text' in msg:
-                                    return json.loads(msg['text'])
-                                elif isinstance(msg, str):
-                                    return json.loads(msg)
+            outputs = data.get("outputs", [])
+            if outputs:
+                nested_outputs = outputs[0].get("outputs", [])
+                if nested_outputs:
+                    results = nested_outputs[0].get("results", {})
+                    message = results.get("message")
+                    if isinstance(message, dict):
+                        text = message.get("text")
+                        if isinstance(text, str):
+                            return json.loads(text)
+                    if isinstance(message, str):
+                        return json.loads(message)
         return None
     except Exception:
         return None
 
-# ==================== LAYOUT ====================
 
-tab1, tab2 = st.tabs(["📤 Upload & Embed Videos", "🔍 Search Videos"])
+def extract_video_id(raw_input: str):
+    patterns = [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/)([^&\n?]+)",
+        r"^([a-zA-Z0-9_-]{11})$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, raw_input)
+        if match:
+            return match.group(1)
+    return ""
 
-# ==================== TAB 1: Upload & Embed ====================
-with tab1:
-    st.header("Upload Video Transcripts to Database")
-    st.markdown("Enter YouTube search query or paste a direct YouTube link to embed into AstraDB")
 
-    input_type = st.radio("Input Method:", ["YouTube Search Query", "Direct YouTube Link"])
+def inject_styles():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-    # ----- Option 1: YouTube Search Query -----
-    if input_type == "YouTube Search Query":
-        query = st.text_input("🔎 YouTube Search Query:", placeholder="e.g., conservation of momentum")
-        num_videos = st.number_input("Number of videos to process:", min_value=1, max_value=20, value=5)
+        :root {
+          --bg: #f5f7fb;
+          --panel: #ffffff;
+          --panel-border: #d8e0ef;
+          --text: #182235;
+          --muted: #5f6f88;
+          --accent: #1f4fff;
+          --accent-soft: rgba(31, 79, 255, 0.08);
+          --ok: #0f9f6e;
+          --warn: #be7b04;
+          --bad: #b62a36;
+        }
 
-        if st.button("🚀 Search, Transcribe & Upload", type="primary"):
-            if query:
-                with st.spinner(f"Processing {num_videos} videos... This may take several minutes"):
-                    st.info(f"🔍 Searching for '{query}' and processing {num_videos} videos...")
+        .stApp {
+          background:
+            radial-gradient(circle at 4% 8%, rgba(31, 79, 255, 0.08), transparent 28%),
+            radial-gradient(circle at 94% 4%, rgba(15, 159, 110, 0.07), transparent 30%),
+            var(--bg);
+          color: var(--text);
+          font-family: 'Space Grotesk', sans-serif;
+        }
 
-                    try:
-                        chunks = process_youtube_search(query, int(num_videos))
-                        if chunks:
-                            progress_bar = st.progress(0.0)
-                            status_text = st.empty()
-                            success, message = send_chunks_to_langflow(chunks, API_KEY, progress_bar, status_text)
-                            if success:
-                                st.success("✅ " + message)
-                            else:
-                                st.error("❌ " + message)
-                        else:
-                            st.error("❌ No transcript chunks were produced.")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-            else:
-                st.error("❌ Please enter a search query")
+        h1, h2, h3 {
+          letter-spacing: -0.02em;
+          color: var(--text);
+          font-family: 'Space Grotesk', sans-serif;
+        }
 
-    # ----- Option 2: Direct YouTube Link -----
-    else:
-        st.markdown("### 📺 Paste YouTube Link")
-        youtube_link = st.text_input(
-            "YouTube Video URL:",
-            placeholder="https://www.youtube.com/watch?v=DxKelGugDa8",
-            help="Paste the full YouTube URL or just the video ID"
-        )
+        p, li, label, .stMarkdown {
+          color: var(--text);
+        }
 
-        video_id = ""
-        if youtube_link:
-            patterns = [
-                r'(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?]+)',
-                r'^([a-zA-Z0-9_-]{11})$'
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, youtube_link)
-                if match:
-                    video_id = match.group(1)
-                    break
+        [data-testid="stSidebar"] {
+          background: linear-gradient(180deg, #f8fbff 0%, #eef3ff 100%);
+          border-right: 1px solid var(--panel-border);
+        }
 
-            if video_id:
-                st.success(f"✅ Detected Video ID: `{video_id}`")
-            else:
-                st.error("❌ Invalid YouTube URL. Please check the link.")
+        .card {
+          background: var(--panel);
+          border: 1px solid var(--panel-border);
+          border-radius: 16px;
+          padding: 1rem 1.1rem;
+          margin-bottom: 1rem;
+          box-shadow: 0 10px 30px rgba(16, 28, 52, 0.05);
+        }
 
-        if st.button("📥 Transcribe & Upload Video", type="primary", disabled=not video_id):
-            if video_id:
-                with st.spinner(f"Processing video {video_id}..."):
-                    st.info("🎥 Downloading and transcribing video...")
+        .meta-chip {
+          display: inline-block;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          border: 1px solid rgba(31, 79, 255, 0.2);
+          color: #19338f;
+          padding: 0.18rem 0.62rem;
+          font-size: 0.78rem;
+          margin-right: 0.4rem;
+          margin-bottom: 0.35rem;
+          font-family: 'IBM Plex Mono', monospace;
+        }
 
-                    try:
-                        chunks = process_single_video(video_id)
-                        if chunks:
-                            progress_bar = st.progress(0.0)
-                            status_text = st.empty()
-                            success, message = send_chunks_to_langflow(chunks, API_KEY, progress_bar, status_text)
-                            if success:
-                                st.success(f"✅ Video {video_id} transcribed and uploaded successfully!")
-                                st.balloons()
-                            else:
-                                st.error("❌ " + message)
-                        else:
-                            st.error("❌ No transcript chunks were produced for this video.")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-            else:
-                st.error("❌ Please enter a valid YouTube link")
+        .muted {
+          color: var(--muted);
+        }
 
-# ==================== TAB 2: Search & Retrieve ====================
-with tab2:
-    st.header("Search Video Database")
-    st.markdown("Enter your query to find relevant video clips with timestamps")
+        .status-ok { color: var(--ok); font-weight: 600; }
+        .status-bad { color: var(--bad); font-weight: 600; }
 
-    search_query = st.text_input(
-        "🔍 Enter your search query:",
-        placeholder="e.g., Tell me where conservation of momentum is explained",
-        key="search_input"
+        div[data-baseweb="tab-list"] {
+          gap: 0.4rem;
+        }
+
+        button[kind="primary"] {
+          border-radius: 10px !important;
+          border: none !important;
+          font-weight: 600 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        search_button = st.button("🔎 Search", type="primary", use_container_width=True)
-    with col2:
-        num_results = st.slider("Number of results:", 1, 10, 5)
 
-    if search_button and search_query:
-        with st.spinner("Searching database..."):
-            try:
+st.set_page_config(
+    page_title="YouTube Search Engine",
+    page_icon="YT",
+    layout="wide",
+)
+inject_styles()
+
+st.title("YouTube Search Engine")
+st.caption("Transcribe YouTube videos and run semantic retrieval over timestamped segments.")
+
+if not config_is_ready():
+    st.warning(
+        "Set LANGFLOW_HOST, LANGFLOW_UPLOAD_FLOW_ID, and LANGFLOW_QUERY_FLOW_ID in environment variables before running uploads or search."
+    )
+
+st.markdown('<div class="card"><span class="meta-chip">Streamlit UI</span><span class="meta-chip">Whisper</span><span class="meta-chip">LangFlow + AstraDB</span><p class="muted">Pipeline: fetch video -> transcribe -> chunk -> embed -> semantic retrieval.</p></div>', unsafe_allow_html=True)
+
+upload_tab, search_tab = st.tabs(["Upload and Embed", "Search Clips"])
+
+with upload_tab:
+    st.subheader("Index videos")
+    input_mode = st.radio("Input source", ["YouTube search", "Single video URL"], horizontal=True)
+
+    if input_mode == "YouTube search":
+        with st.form("search_upload_form"):
+            query = st.text_input("Search query", placeholder="example: conservation of momentum")
+            num_videos = st.number_input("Videos to process", min_value=1, max_value=20, value=5)
+            submit_search_upload = st.form_submit_button("Run indexing", type="primary")
+
+        if submit_search_upload:
+            if not query.strip():
+                st.error("Provide a search query.")
+            elif not config_is_ready():
+                st.error("Configuration is incomplete. Check required environment variables.")
+            else:
+                with st.spinner(f"Processing {num_videos} videos..."):
+                    chunks = process_youtube_search(query, int(num_videos))
+                    if not chunks:
+                        st.error("No transcript chunks were generated.")
+                    else:
+                        progress = st.progress(0.0)
+                        status = st.empty()
+                        success, message = send_chunks_to_langflow(chunks, API_KEY, progress, status)
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+
+    else:
+        with st.form("single_video_form"):
+            youtube_link = st.text_input(
+                "YouTube URL or video id",
+                placeholder="https://www.youtube.com/watch?v=DxKelGugDa8",
+            )
+            submit_single_upload = st.form_submit_button("Transcribe and upload", type="primary")
+
+        if youtube_link:
+            video_id = extract_video_id(youtube_link)
+            if video_id:
+                st.info(f"Detected video id: {video_id}")
+            else:
+                st.error("Invalid YouTube link or id.")
+
+        if submit_single_upload:
+            if not config_is_ready():
+                st.error("Configuration is incomplete. Check required environment variables.")
+            else:
+                video_id = extract_video_id(youtube_link)
+                if not video_id:
+                    st.error("Provide a valid YouTube URL or id.")
+                else:
+                    with st.spinner(f"Processing video {video_id}..."):
+                        chunks = process_single_video(video_id)
+                        if not chunks:
+                            st.error("No transcript chunks were generated for this video.")
+                        else:
+                            progress = st.progress(0.0)
+                            status = st.empty()
+                            success, message = send_chunks_to_langflow(chunks, API_KEY, progress, status)
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
+
+with search_tab:
+    st.subheader("Retrieve relevant clips")
+    with st.form("search_form"):
+        query = st.text_input("Query", placeholder="example: where momentum is introduced")
+        num_results = st.slider("Results", 1, 10, 5)
+        run_query = st.form_submit_button("Search", type="primary")
+
+    if run_query:
+        if not query.strip():
+            st.warning("Provide a query.")
+        elif not config_is_ready():
+            st.error("Configuration is incomplete. Check required environment variables.")
+        else:
+            with st.spinner("Searching..."):
                 url = f"{HOST}/api/v1/run/{QUERY_FLOW_ID}"
                 payload = {
-                    "input_value": search_query,
+                    "input_value": query,
                     "output_type": "text",
-                    "input_type": "chat"
+                    "input_type": "chat",
                 }
+                ok, status_code, body, _ = try_auth_methods(url, payload, API_KEY)
 
-                ok, status, body, method = try_auth_methods(url, payload, API_KEY)
-
-                if ok:
+                if not ok:
+                    st.error(f"Search request failed with status: {status_code}")
+                else:
                     results = parse_response_json(body)
-
-                    if results:
-                        st.success(f"✅ Found {len(results)} relevant video clip(s)")
-
-                        for i, result in enumerate(results[:num_results], 1):
+                    if not results:
+                        st.info("No clips found for this query.")
+                    else:
+                        st.success(f"Found {min(len(results), num_results)} clip(s).")
+                        for index, result in enumerate(results[:num_results], 1):
                             video_id = result.get("video_id", "")
                             start = int(result.get("start", 0))
                             end = int(result.get("end", 0))
                             text = result.get("text", "")
-                            score = result.get("score", 0)
+                            score = float(result.get("score", 0))
+                            video_url = f"https://www.youtube.com/watch?v={video_id}&t={start}s"
 
-                            youtube_url = f"https://www.youtube.com/watch?v={video_id}&t={start}s"
+                            st.markdown('<div class="card">', unsafe_allow_html=True)
+                            st.markdown(f"### Clip {index}")
+                            st.markdown(
+                                f"<span class='meta-chip'>video={video_id}</span><span class='meta-chip'>time={start}s-{end}s</span><span class='meta-chip'>score={score:.2f}</span>",
+                                unsafe_allow_html=True,
+                            )
 
-                            with st.container():
-                                st.markdown(f"### 📹 Clip {i} - Relevance: {score:.2f}")
-
-                                col_a, col_b = st.columns([3, 2])  # wider video, narrower transcript
-
-                                with col_a:
-                                    # Embed video in the UI
-                                    st.video(youtube_url, start_time=start)
-                                    # Optional external link
-                                    st.link_button("🔗 Open on YouTube", youtube_url, use_container_width=True)
-                                    st.markdown(f"**Video ID:** `{video_id}`")
-                                    st.markdown(f"**Time:** {start}s - {end}s ({end-start}s)")
-
-                                with col_b:
-                                    clean_text_display = re.sub(r'\[VID:.*?\]\s*', '', text)
-                                    snippet = clean_text_display[:300] + "..." if len(clean_text_display) > 300 else clean_text_display
-                                    st.markdown("**Transcript Excerpt:**")
-                                    st.text_area(
-                                    "Transcript Excerpt",
+                            left, right = st.columns([3, 2])
+                            with left:
+                                st.video(video_url, start_time=start)
+                                st.link_button("Open in YouTube", video_url, use_container_width=True)
+                            with right:
+                                clean_text = re.sub(r"\[VID:.*?\]\s*", "", text)
+                                snippet = clean_text[:500] + "..." if len(clean_text) > 500 else clean_text
+                                st.text_area(
+                                    f"Transcript excerpt {index}",
                                     snippet,
-                                    height=250,
-                                    key=f"text_{i}",
-                                    label_visibility="collapsed"
+                                    height=220,
+                                    key=f"snippet_{index}",
                                 )
+                            st.markdown("</div>", unsafe_allow_html=True)
 
-
-                                st.divider()
-                    else:
-                        st.warning("No results found for your query")
-                else:
-                    st.error(f"Search failed with status code: {status}")
-
-            except requests.exceptions.Timeout:
-                st.error("⏱️ Search timed out. Please try again.")
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
-    elif search_button:
-        st.warning("Please enter a search query")
-
-# Sidebar info
 with st.sidebar:
-    st.header("ℹ️ System Info")
-    st.markdown(f"""
-    **LangFlow Host:** `{HOST}`
+    st.header("System")
+    host_state = "configured" if HOST else "missing"
+    upload_state = "configured" if UPLOAD_FLOW_ID else "missing"
+    query_state = "configured" if QUERY_FLOW_ID else "missing"
 
-    **Upload Flow ID:**  
-    `{UPLOAD_FLOW_ID[:8]}...`
-
-    **Query Flow ID:**  
-    `{QUERY_FLOW_ID[:8]}...`
-
-    **Status:** 🟢 Connected
-    """)
-
-    st.divider()
-    st.markdown("### 📊 Features")
-    st.markdown("""
-    - Semantic video search
-    - Timestamp-accurate results
-    - YouTube integration
-    - AstraDB vector storage
-    - Whisper transcription
-    """)
-
-    st.divider()
-    st.markdown("### 📁 Output Directory")
+    st.markdown(f"Host: `{host_state}`")
+    st.markdown(f"Upload flow: `{upload_state}`")
+    st.markdown(f"Query flow: `{query_state}`")
+    st.markdown(f"API key: `{'set' if API_KEY else 'not set'}`")
     st.code(str(OUTPUT_DIR))
+
+    if config_is_ready():
+        st.markdown('<p class="status-ok">Configuration ready</p>', unsafe_allow_html=True)
+    else:
+        st.markdown('<p class="status-bad">Configuration incomplete</p>', unsafe_allow_html=True)
