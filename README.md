@@ -2,7 +2,13 @@
 
 A clean Streamlit application for indexing YouTube transcripts and retrieving timestamped clips with semantic search.
 
-[Demo Video](https://github.com/user-attachments/assets/5b9d11ae-bf6b-4004-abce-d75483bb53b6)
+## What it does
+
+- Downloads video audio using `yt-dlp`
+- Transcribes with Whisper (fallback to YouTube captions)
+- Chunks transcript text with timestamps
+- Sends chunks to a LangFlow embedding pipeline (AstraDB-backed)
+- Runs semantic retrieval and returns relevant clips with direct playback links
 
 ## Screenshots
 
@@ -18,14 +24,6 @@ A clean Streamlit application for indexing YouTube transcripts and retrieving ti
 ## Demo
 
 [Watch Demo](https://github.com/user-attachments/assets/5b9d11ae-bf6b-4004-abce-d75483bb53b6)
-
-## What it does
-
-- Downloads video audio using `yt-dlp`
-- Transcribes with Whisper (fallback to YouTube captions)
-- Chunks transcript text with timestamps
-- Sends chunks to a LangFlow embedding pipeline (AstraDB-backed)
-- Runs semantic retrieval and returns relevant clips with direct playback links
 
 ## Project structure
 
