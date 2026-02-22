@@ -2,7 +2,7 @@
 
 A clean Streamlit application for indexing YouTube transcripts and retrieving timestamped clips with semantic search.
 
-[Demo Video](assets/demo/seek-and-play-demo.mp4)
+[Demo Video](https://github.com/user-attachments/assets/5b9d11ae-bf6b-4004-abce-d75483bb53b6)
 
 ## Screenshots
 
@@ -17,7 +17,7 @@ A clean Streamlit application for indexing YouTube transcripts and retrieving ti
 
 ## Demo
 
-[Watch Demo](assets/demo/seek-and-play-demo.mp4)
+[Watch Demo](https://github.com/user-attachments/assets/5b9d11ae-bf6b-4004-abce-d75483bb53b6)
 
 ## What it does
 
