@@ -84,8 +84,8 @@ streamlit run app.py
 
 ## Security
 
-Do not commit real API keys. Use environment variables or local `.env` only.
+This project reads secrets from environment variables. Keep `.env` local and never commit real credentials.
 
 ## License
 
-Add a license file if you plan to distribute or accept contributions.
+No license has been added yet.
