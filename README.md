@@ -2,28 +2,22 @@
 
 A clean Streamlit application for indexing YouTube transcripts and retrieving timestamped clips with semantic search.
 
-[Demo Video](https://github.com/Rohan1924/Youtube-search-engine)
+[Demo Video](assets/demo/seek-and-play-demo.mp4)
 
 ## Screenshots
 
-Add your screenshots to `assets/screenshots/` with these names:
+### UI
 
-- `home.png`
-- `upload.png`
-- `search-results.png`
+![UI Screenshot 1](assets/screenshots/seek-and-play-ui-1.png)
+![UI Screenshot 2](assets/screenshots/seek-and-play-ui-2.png)
 
-Then they will render here:
+### Architecture
 
-![Home](assets/screenshots/home.png)
-![Upload Pipeline](assets/screenshots/upload.png)
-![Search Results](assets/screenshots/search-results.png)
+![Architecture Diagram](assets/screenshots/seek-and-play-arch.png)
 
 ## Demo
 
-- Upload your demo video to `assets/demo/demo.mp4` and commit it if size is acceptable.
-- If the file is large, upload to YouTube/Drive and replace the link below.
-
-[Watch Demo](https://github.com/Rohan1924/Youtube-search-engine)
+[Watch Demo](assets/demo/seek-and-play-demo.mp4)
 
 ## What it does
 
